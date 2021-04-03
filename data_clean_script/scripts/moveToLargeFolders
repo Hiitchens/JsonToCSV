@@ -1,0 +1,19 @@
+#!/bin/bash
+FILES=path/to/files
+COUNT=1
+folderNum=1
+filesPerFolder=2500 #change this to customize how many files per divided folder
+mkdir $folderNum
+for f in *.csv
+do
+((COUNT++))
+  echo "Processing $f file..."
+  if [[ "$COUNT" -gt "$filesPerFolder" ]];
+  then
+	((folderNum++))
+	mkdir $folderNum
+	COUNT=0
+  fi
+  #$f store current file name. move file from large folder to smaller folder
+  mv $f ./$folderNum/$f
+done

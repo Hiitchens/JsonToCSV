@@ -1,0 +1,139 @@
+#!/bin/bash
+
+currentDir=$(pwd)
+numProcesses=1
+convert=0
+plaidData=0
+clientData=0
+clean=0
+dataFamily=0
+operationSize=0
+
+
+checkDirExist () {
+[ -d "$1" ] && echo "Directory "$1" exists." || mkdir "$1"
+}
+
+convertData() {
+jsonexport $1 $2
+}
+
+cleanPlaidData() {
+Rscript $1 $2
+}
+
+
+((!$#)) && echo -e "No arguments supplied.\v" && (echo -e "usage: gperfcleaner [-conv convert] [-pd plaiddata] [-cs clientstatsdata] [-P numberofprocesses] [-id inputdirectory] [-if inputfile] [-o outputFolder]" 
+		echo -e "\t[-conv \t# convert input folder from json to csv]"
+		echo -e "\t[-cs \t# specify input data as client stats data to be cleaned]"		
+		echo -e "\t[-pd \t# specify input data as plaid data to be cleaned]"
+		echo -e "\t[-id \t# specify input directory]"
+		echo -e "\t[-if \t# specify single input file]"
+		echo -e "\t[-o \t# output destination]"
+		echo -e "\t[-P \t# specify number of processes]")
+		
+		echo "Created By James Behnke. Last Edited Dec 22 2020"
+		echo "For examples and tutorials visit: https://confluence2020.okanagan.bc.ca/x/CYf1 "
+		
+
+while [ -n "$1" ]; do # while loop starts
+
+	case "$1" in
+
+	-h) echo -e "usage: gperfcleaner [-conv convert] [-pd plaiddata] [-cs clientstatsdata] [-ors otherRscript] [-P numberofprocesses] [-id inputdirectory] [-if inputfile] [-o outputFolder] " 
+		echo -e "\t[-conv \t# convert input folder from json to csv]"
+		echo -e "\t[-cs \t# specify input data as client stats data to be cleaned]"		
+		echo -e "\t[-pd \t# specify input data as plaid data to be cleaned]"
+		echo -e "\t[-id \t# specify input directory]"
+		echo -e "\t[-if \t# specify single input file]"
+		echo -e "\t[-o \t# output destination]"
+		echo -e "\t[-P \t# specify number of processes]"
+		echo "Created By James Behnke. Last Edited Dec 21 2020"
+		;;
+
+	-conv) convert=1
+	;;
+	
+	-pd)dataFamily="pd"
+		clean=1
+		;;
+
+	-cs) dataFamily="cs"
+		 clean=1
+		;;
+
+	-P) numProcesses="$2"
+	shift
+	;;
+	
+	-if) file="$2"
+		shift
+		;;
+		
+	-id) inputDirectory="$2"
+		 shift
+		 ;;
+	
+	-o)  destinationFolder="$2"
+		 shift
+		 ;;
+	--)
+		shift # The double dash makes them parameters
+
+		break
+		;;
+
+	*) echo "Option $1 not recognized" ;;
+	
+
+	esac
+
+	shift
+
+done
+
+
+case "$convert" in
+
+0) case "$dataFamily" in
+	
+	pd) #find "$inputDirectory" -type f -name ".csv" -print0 | xargs -0 -I '{}' -P"$numProcesses" Rscript ./scripts/plaidData.R '{}' "$destinationFolder"'{}'.csv 
+		;;
+	
+	cs) #find . -type f -name "*.csv" -print0 | xargs -0 -I '{}' -P"$numProcesses" sh -c 'Rscript ./scripts/client_Stats.R '{}' ./cleaned/'{}'; echo "Converted and Cleaned '{}'" '
+		;;
+	esac
+	;;
+1) case "$dataFamily" in
+	
+	pd) checkDirExist "./minified/"
+		find . -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 -I '{}' -P"$numProcesses" sh -c 'gsed -i -E "s/(\".*\")|\s*/\1/g" '{}'; cat '{}' | tr -d "\n" > ./minified/'{}'; gsed -i -E "s/}},/}},\n/g;s/.*\[{/{/;s/\]}}//g" ./minified/'{}'; echo "Finished trimming '{}'"'
+		cd ./minified/
+		checkDirExist "./plaid_converted/"
+		find . -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 -I '{}' -P"$numProcesses" sh -c 'jsonexport '{}' ./plaid_converted/'{}.csv'; echo '{}''
+		cd ./plaid_converted/
+		checkDirExist "./cleaned/" 
+		find . -maxdepth 1 -type f -name "*.csv" -print0 | xargs -0 -I '{}' -P"$numProcesses" sh -c 'Rscript ../../scripts/monthPlaidData.R '{}' ./cleaned/'{}'; echo "Converted and Cleaned '{}'" '
+		cd ../..
+		checkDirExist "$destinationFolder"
+		mv ./minified/ "$destinationFolder"
+		;;
+	
+	cs) checkDirExist "./minified/"
+		find . -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 -I '{}' -P"$numProcesses" sh -c 'cat '{}' | tr -d '[:space:]' > ./minified/'{}'; gsed -i -E "s/}},/}},\n/g" ./minified/'{}'; echo '{}' '
+		cd ./minified/
+		checkDirExist "./client_stats_converted/" 
+		find . -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 -I '{}' -P"$numProcesses" sh -c 'jsonexport '{}' ./client_stats_converted/'{}.csv'; echo '{}''
+		cd ./client_stats_converted/
+		checkDirExist "./cleaned/" 
+		checkDirExist "./cleaned_All/"
+		find . -maxdepth 1 -type f -name "*.csv" -print0 | xargs -0 -I '{}' -P"$numProcesses" sh -c 'Rscript ../../scripts/client_Stats.R '{}' ./cleaned/'{}'; Rscript ../../scripts/clientStatsAllData.R '{}' ./cleaned_All/'{}'; echo "Converted and Cleaned '{}'" '
+		cd ../..
+		checkDirExist "$destinationFolder"
+		mv ./minified/ "$destinationFolder"
+		;;
+	
+	esac
+	;;
+
+esac

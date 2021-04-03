@@ -1,0 +1,154 @@
+# Author: James Behnke
+# Purpose: Automates the process of running different programs to clean and transform monthly WTFast data dumps.
+# Usage: This script accepts Plaid or Client stats data and performs the associated cleaning and tranformation scripts with said data.
+# License: MIT License
+ 
+# Copyright (c) [2021] [James Behnke]
+ 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+ 
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+ 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+ 
+# Begin
+
+#!/bin/bash
+
+currentDir=$(pwd)
+numProcesses=1
+convert=0
+plaidData=0
+clientData=0
+clean=0
+dataFamily=0
+convertOnly="find . -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 -I '{}' -P"$numProcesses" sh -c 'jsonexport '{}' ./JSONtoCSV/'{}.csv'; mv ./JSONtoCSV/ "$destinationFolder"; echo '{}' converted to CSV'"
+availableFiles=$(ls *.json | wc -l)
+
+checkDirExist () {
+[ -d "$1" ] && echo "Directory "$1" exists." || mkdir "$1"
+}
+
+
+echo "Processing $availableFiles files"
+((!$#)) && echo -e "No arguments supplied.\v" && (echo -e "usage: gperfcleaner [-conv convert] [-pd plaiddata] [-cs clientstatsdata] [-P numberofprocesses] [-o outputFolder]" 
+		echo -e "\t[-conv \t# convert input folder from json to csv]"
+		echo -e "\t[-cs \t# specify input data as client stats data to be cleaned]"		
+		echo -e "\t[-pd \t# specify input data as plaid data to be cleaned]"
+		echo -e "\t[-o \t# output destination]"
+		echo -e "\t[-P \t# specify number of processes]")
+		
+		echo "Created By James Behnke. Last Edited January 7 2021"
+		echo "For examples and tutorials visit: https://confluence2020.okanagan.bc.ca/x/CYf1 "
+		
+
+
+while [ -n "$1" ]; do # while loop starts and runs until it has handled all arguments
+
+	case "$1" in
+
+	-h) echo -e "usage: gperfcleaner [-conv convert] [-pd plaiddata] [-cs clientstatsdata] [-P numberofprocesses] [-o outputFolder] " 
+		echo -e "\t[-conv \t# convert input folder from json to csv]"
+		echo -e "\t[-cs \t# specify input data as client stats data to be cleaned]"		
+		echo -e "\t[-pd \t# specify input data as plaid data to be cleaned]"
+		echo -e "\t[-o \t# output destination]"
+		echo -e "\t[-P \t# specify number of processes]"
+		echo "Created By James Behnke. Last Edited January 7 2021"
+		;;
+
+	-conv) convert=1
+		;;
+	-pd)dataFamily="pd"
+		clean=1
+		;;
+	-cs) dataFamily="cs"
+		clean=1
+		;;
+	-P) numProcesses="$2"
+		shift
+		;;
+	-if) file="$2"
+		shift
+		;;
+	-id) inputDirectory="$2"
+		 shift
+		 ;;	
+	-o)  destinationFolder="$2"
+		 shift
+		 ;;
+	--)
+		shift 
+		break
+		;;
+
+	*) echo "Option $1 not recognized" ;;
+	esac
+	shift
+done
+
+if [ "$availableFiles" -gt 0 ]; then
+
+case "$convert" in
+
+0) case "$dataFamily" in
+	
+	pd) checkDirExist "./JSONtoCSV/"
+		eval "$convertOnly"
+		;;
+	
+	cs) checkDirExist "./JSONtoCSV/"
+		eval "$convertOnly"
+		;;
+	esac
+	;;
+1) case "$dataFamily" in
+	
+	pd) checkDirExist "./originalFiles/"
+		checkDirExist "./minified/"
+		find . -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 -I '{}' -P"$numProcesses" sh -c 'cp '{}' ./originalFiles/'{}'; sed -i -r "s/(\".*\")|\s*/\1/g" '{}'; cat '{}' | tr -d "\n" > ./minified/'{}'; sed -i "s/}},/}},\n/g;s/.*\[{/{/;s/\]}}//g" ./minified/'{}'; rm '{}' '
+		cd ./minified/
+		checkDirExist "./plaid_converted/"
+		find . -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 -I '{}' -P"$numProcesses" sh -c 'jsonexport '{}' ./plaid_converted/'{}.csv'; echo "Finished trimming '{}'"'
+		cd ./plaid_converted/
+		checkDirExist "./cleaned/" 
+		find . -maxdepth 1 -type f -name "*.csv" -print0 | xargs -0 -I '{}' -P"$numProcesses" sh -c 'Rscript ../../scripts/monthPlaidData.R '{}' ./cleaned/'{}' &>> log.txt; echo "Converted and Cleaned '{}'" '
+		cd ../..
+		checkDirExist "$destinationFolder"
+		mv ./minified/ "$destinationFolder"
+		;;
+	
+	cs) checkDirExist "./originalFiles/"
+		checkDirExist "./minified/"
+		find . -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 -I '{}' -P"$numProcesses" sh -c 'cp '{}' ./originalFiles/'{}'; sed -i -r "s/(\".*\")|\s*/\1/g" '{}'; cat '{}' | tr -d "\n" > ./minified/'{}'; sed -i "s/}},/}},\n/g" ./minified/'{}'; rm '{}''
+		cd ./minified/
+		checkDirExist "./client_stats_converted/"
+		find . -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 -I '{}' -P"$numProcesses" sh -c 'jsonexport '{}' ./client_stats_converted/'{}.csv'; echo "Finished trimming '{}'"'
+		cd ./client_stats_converted/
+		checkDirExist "./cleaned/" 
+		checkDirExist "./cleaned_All/"
+		find . -maxdepth 1 -type f -name "*.csv" -print0 | xargs -0 -I '{}' -P"$numProcesses" sh -c 'Rscript ../../scripts/client_Stats.R '{}' ./cleaned/'{}' &>> log.txt; echo "Converted and Cleaned '{}'" '
+		cd ../..
+		checkDirExist "$destinationFolder"
+		mv ./minified/ "$destinationFolder"
+		;;
+	
+	esac
+	;;
+
+esac
+
+else
+	echo "Error, there are no files to convert. Please add json files to this directory"	
+fi
